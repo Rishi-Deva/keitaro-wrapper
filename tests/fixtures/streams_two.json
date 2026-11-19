@@ -1,0 +1,67 @@
+[
+  {
+    "id": 800001,
+    "type": "regular",
+    "name": "Geo AU → Google",
+    "campaign_id": 900001,
+    "position": 1,
+    "action_options": null,
+    "comments": null,
+    "state": "active",
+    "created_at": "2026-01-01 00:00:00",
+    "action_type": "http",
+    "action_payload": "https://www.google.com/",
+    "schema": "redirect",
+    "collect_clicks": true,
+    "filter_or": false,
+    "weight": 0,
+    "offer_selection": "before_click",
+    "filters": [
+      {
+        "id": 600001,
+        "stream_id": 800001,
+        "name": "country",
+        "mode": "accept",
+        "payload": [
+          "AU"
+        ],
+        "oid": 600001
+      }
+    ],
+    "triggers": [],
+    "landings": [],
+    "offers": []
+  },
+  {
+    "id": 800002,
+    "type": "regular",
+    "name": "Остальные → оффер",
+    "campaign_id": 900001,
+    "position": 2,
+    "action_options": null,
+    "comments": null,
+    "state": "active",
+    "created_at": "2026-01-01 00:00:00",
+    "action_type": "http",
+    "action_payload": null,
+    "schema": "landings",
+    "collect_clicks": true,
+    "filter_or": false,
+    "weight": 0,
+    "offer_selection": "before_click",
+    "filters": [],
+    "triggers": [],
+    "landings": [],
+    "offers": [
+      {
+        "id": 700001,
+        "stream_id": 800002,
+        "offer_id": 7001,
+        "state": "active",
+        "share": 100,
+        "created_at": "2026-01-01 00:00:00",
+        "updated_at": "2026-01-01 00:00:00"
+      }
+    ]
+  }
+]

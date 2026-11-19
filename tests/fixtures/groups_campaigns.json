@@ -1,0 +1,14 @@
+[
+  {
+    "id": 202,
+    "name": "EXAMPLE_GROUP",
+    "position": 1,
+    "type": "campaigns"
+  },
+  {
+    "id": 2,
+    "name": "other_group",
+    "position": 2,
+    "type": "campaigns"
+  }
+]

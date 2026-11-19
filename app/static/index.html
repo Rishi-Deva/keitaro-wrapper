@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Создание кампании</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <strong>Keitaro wrapper</strong>
+  <a href="index.html" class="active">Создать кампанию</a>
+  <a href="editor.html">Редактор</a>
+</header>
+<main>
+  <form id="form" class="card" novalidate>
+    <h2>Новая кампания</h2>
+
+    <label for="name">Имя кампании <span class="hint" id="prefix-hint"></span></label>
+    <input id="name" name="name" maxlength="200" required placeholder="например, demo_mx">
+
+    <label for="geo">Гео (код страны) <span class="hint">ISO 3166-1, например MX, AU, RO</span></label>
+    <input id="geo" name="geo" list="geo-list" maxlength="2" required placeholder="MX" style="text-transform:uppercase">
+    <datalist id="geo-list"></datalist>
+
+    <label for="offer">Оффер <span class="hint">начните вводить название или ID</span></label>
+    <div><input id="offer" name="offer" required placeholder="поиск оффера…"></div>
+
+    <p class="hint" id="flow-hint"></p>
+    <button id="create" type="submit">Create</button>
+    <div id="msg" class="msg" role="status" aria-live="polite"></div>
+  </form>
+
+  <div id="result" class="card" hidden></div>
+</main>
+<script src="app.js"></script>
+<script>
+"use strict";
+const $ = (id) => document.getElementById(id);
+let cfg = { campaign_prefix: "", redirect_url: "" };
+let geoCodes = new Set();
+let pickedOffer = null;
+
+offerAutocomplete($("offer"), (o) => { pickedOffer = o; });
+
+(async () => {
+  try {
+    cfg = await api("GET", "/api/config");
+    $("prefix-hint").textContent = "— префикс «" + cfg.campaign_prefix + "» добавится автоматически";
+    $("flow-hint").textContent =
+      "Будут созданы 2 потока: 1) посетители из указанной страны → " + cfg.redirect_url + "; 2) остальные → выбранный оффер (100%).";
+    const codes = await api("GET", "/api/geo");
+    geoCodes = new Set(codes);
+    $("geo-list").replaceChildren(...codes.map(c => el("option", { value: c })));
+  } catch (e) {
+    showMsg($("msg"), "Не удалось загрузить настройки: " + e.message, "err");
+  }
+})();
+
+$("form").addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  const name = $("name").value.trim();
+  const geo = $("geo").value.trim().toUpperCase();
+  const errors = [];
+  if (!name) errors.push("Укажите имя кампании");
+  if (!geoCodes.has(geo)) errors.push("Укажите корректный код страны (например MX)");
+  if (!pickedOffer) errors.push("Выберите оффер из списка");
+  if (errors.length) { showMsg($("msg"), errors.join("\n"), "err"); return; }
+
+  const btn = $("create");
+  btn.disabled = true; btn.textContent = "Создаём…";
+  showMsg($("msg"), "");
+  $("result").hidden = true;
+  try {
+    const res = await api("POST", "/api/campaigns", { name, geo, offer_id: pickedOffer.id });
+    showMsg($("msg"), "Кампания создана", "ok");
+    renderResult(res);
+  } catch (e) {
+    showMsg($("msg"), e.message, "err");
+  } finally {
+    btn.disabled = false; btn.textContent = "Create";
+  }
+});
+
+function renderResult(r) {
+  const box = $("result");
+  const [s1, s2] = r.streams;
+  box.replaceChildren(
+    el("h3", null, r.name, " ", el("span", { class: "badge" }, "#" + r.id)),
+    el("p", { class: "muted" }, "alias: ", r.alias),
+    el("table", null,
+      el("thead", null, el("tr", null, el("th", null, "Поток"), el("th", null, "Условие"), el("th", null, "Действие"))),
+      el("tbody", null,
+        el("tr", null, el("td", null, "#" + s1.id), el("td", null, "страна = " + s1.geo), el("td", null, "редирект → " + s1.redirect)),
+        el("tr", null, el("td", null, "#" + s2.id), el("td", null, "все остальные"),
+          el("td", null, "оффер " + (r.offer.name || "") + " (#" + r.offer.id + "), 100%")),
+      ),
+    ),
+    el("p", null, el("a", { href: "editor.html?campaign=" + encodeURIComponent(r.id) }, "Открыть в редакторе →")),
+  );
+  box.hidden = false;
+}
+</script>
+</body>
+</html>

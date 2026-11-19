@@ -1,0 +1,33 @@
+[
+  {
+    "id": 101,
+    "name": "campaign-domain.example",
+    "is_ssl": true,
+    "network_status": "active",
+    "default_campaign_id": null,
+    "state": "active",
+    "created_at": "2026-01-01 00:00:00",
+    "updated_at": "2026-01-01 00:00:00",
+    "catch_not_found": false,
+    "notes": null,
+    "error_description": null,
+    "ssl_status": "issued",
+    "ssl_data": null,
+    "next_check_at": "2026-01-01 00:00:00",
+    "ssl_redirect": true,
+    "allow_indexing": false,
+    "check_retries": 2,
+    "group_id": 404,
+    "admin_dashboard": false,
+    "registrar": "",
+    "external_id": "",
+    "cloudflare_proxy": false,
+    "cloudflare_id": null,
+    "dns_provider": "cloudflare",
+    "campaigns_count": 3,
+    "default_campaign": null,
+    "group": "Example domain group",
+    "error_solution": null,
+    "status": "active"
+  }
+]

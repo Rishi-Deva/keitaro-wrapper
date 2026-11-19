@@ -1,0 +1,16 @@
+{
+  "alias_required_422": {
+    "alias": [
+      "Alias is required"
+    ]
+  },
+  "param_required_400": {
+    "error": "Param 'type' is required",
+    "stacktrace": null
+  },
+  "no_permission_403": {
+    "error": "You have no permission to access this page - Offers",
+    "stacktrace": null
+  },
+  "nginx_404_html": "<html>\r\n<head><title>404 Not Found</title></head>\r\n<body>\r\n<center><h1>404 Not Found</h1></center>\r\n<hr><center>nginx/1.24.0</center>\r\n</body>\r\n</html>\r\n"
+}

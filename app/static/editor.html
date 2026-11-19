@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Редактор кампании</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <strong>Keitaro wrapper</strong>
+  <a href="index.html">Создать кампанию</a>
+  <a href="editor.html" class="active">Редактор</a>
+</header>
+<main>
+  <div class="card">
+    <h2>Редактор кампании</h2>
+    <div class="row">
+      <div class="grow">
+        <label for="filter">Поиск <span class="hint">по имени или ID</span></label>
+        <input id="filter" placeholder="test_…">
+      </div>
+      <div class="grow">
+        <label for="campaign">Кампания</label>
+        <select id="campaign"><option value="">— загрузка… —</option></select>
+      </div>
+    </div>
+    <div class="toolbar">
+      <button id="fetch" type="button" disabled>Fetch Streams from KT</button>
+      <a id="kt-link" class="btnlink" target="_blank" rel="noopener noreferrer" hidden>View in KT</a>
+      <button id="all-offers" type="button" class="secondary">Show All Offers</button>
+      <button id="delete" type="button" class="danger" hidden>Удалить кампанию</button>
+    </div>
+    <p class="hint" id="ro-hint"></p>
+    <div id="msg" class="msg" role="status" aria-live="polite"></div>
+  </div>
+  <div id="offers-box" class="card" hidden></div>
+  <div id="view"></div>
+</main>
+<script src="app.js"></script>
+<script>
+"use strict";
+const $ = (id) => document.getElementById(id);
+let campaigns = [];
+let current = null;      // campaign view from our DB
+let busy = false;
+let confirmDelete = false;
+
+(async () => {
+  try {
+    const cfg = await api("GET", "/api/config");
+    $("ro-hint").textContent = "Fetch и черновик доступны для любой кампании. Push to KT и удаление — только для кампаний с префиксом «" +
+      cfg.campaign_prefix + "». Жёлтый поток = есть неопубликованные изменения.";
+  } catch (_) {}
+  await loadCampaigns();
+  const pre = new URLSearchParams(location.search).get("campaign");
+  if (pre) { $("campaign").value = pre; if ($("campaign").value === pre) selectCampaign(pre); }
+})();
+
+async function loadCampaigns() {
+  try {
+    campaigns = await api("GET", "/api/campaigns");
+    fillSelect();
+  } catch (e) {
+    showMsg($("msg"), "Не удалось загрузить кампании: " + e.message, "err");
+  }
+}
+
+function fillSelect() {
+  const q = $("filter").value.trim().toLowerCase();
+  const sel = $("campaign"), keep = sel.value;
+  const rows = campaigns
+    .filter(c => !q || String(c.name).toLowerCase().includes(q) || String(c.id) === q)
+    .sort((a, b) => (b.editable - a.editable) || (b.id - a.id));
+  sel.replaceChildren(el("option", { value: "" }, rows.length ? "— выберите кампанию (" + rows.length + ") —" : "— нет кампаний —"),
+    ...rows.map(c => el("option", { value: c.id }, (c.editable ? "" : "🔒 ") + c.name + "  #" + c.id)));
+  if ([...sel.options].some(o => o.value === keep)) sel.value = keep;
+}
+
+$("filter").addEventListener("input", debounce(fillSelect, 150));
+$("campaign").addEventListener("change", () => selectCampaign($("campaign").value));
+$("fetch").addEventListener("click", () => run(() => api("POST", `/api/campaigns/${current.id}/fetch`), "Потоки загружены из Keitaro", true));
+$("all-offers").addEventListener("click", toggleAllOffers);
+$("delete").addEventListener("click", deleteCampaign);
+
+async function selectCampaign(id) {
+  showMsg($("msg"), "");
+  confirmDelete = false;
+  if (!id) { current = null; render(); return; }
+  history.replaceState(null, "", "?campaign=" + encodeURIComponent(id));
+  try {
+    current = await api("GET", `/api/campaigns/${encodeURIComponent(id)}/streams`);
+    const c = campaigns.find(x => String(x.id) === String(id));
+    if (c && !current.name) { current.name = c.name; current.editable = c.editable; }
+    render();
+  } catch (e) { showMsg($("msg"), e.message, "err"); }
+}
+
+// Runs an API call that returns a campaign view (fullView) or a stream view, then re-renders.
+async function run(fn, okText, fullView) {
+  if (busy) return;
+  busy = true; render();
+  showMsg($("msg"), "Выполняем…");
+  try {
+    const res = await fn();
+    if (fullView) {
+      current = res;
+      const w = (res.warnings || []);
+      showMsg($("msg"), okText + (w.length ? "\n⚠ " + w.join("\n⚠ ") : ""), w.length ? "" : "ok");
+    } else {
+      current.streams = current.streams.map(s => s.id === res.id ? res : s);
+      showMsg($("msg"), okText + (res.note ? "\n" + res.note : ""), "ok");
+    }
+  } catch (e) {
+    showMsg($("msg"), e.message, "err");
+    try { current = await api("GET", `/api/campaigns/${current.id}/streams`); } catch (_) {}
+  } finally {
+    busy = false; render();
+  }
+}
+
+function render() {
+  const has = !!current;
+  $("fetch").disabled = !has || busy;
+  $("delete").hidden = !(has && current.editable);
+  $("delete").textContent = confirmDelete ? "Точно удалить? Нажмите ещё раз" : "Удалить кампанию";
+  const link = $("kt-link");
+  if (has && current.kt_url) { link.href = current.kt_url; link.hidden = false; } else { link.hidden = true; }
+  if (!has) { $("view").replaceChildren(); return; }
+
+  const head = el("div", { class: "card" },
+    el("h3", null, current.name || ("Кампания #" + current.id), " ", el("span", { class: "badge" }, "#" + current.id), " ",
+      current.editable ? null : el("span", { class: "badge ro" }, "Push запрещён (чужая кампания)")),
+    el("p", { class: "muted" }, current.fetched ? "Потоков: " + current.streams.length
+      : "Потоки ещё не загружены. Нажмите «Fetch Streams from KT»."));
+  $("view").replaceChildren(head, ...current.streams.map(renderStream));
+}
+
+function renderStream(s) {
+  const card = el("div", { class: "card stream" + (s.dirty ? " dirty" : "") },
+    el("h3", null, "Поток #" + s.position + ": " + (s.name || "без имени"), " ",
+      el("span", { class: "badge" }, "id " + s.id),
+      el("span", { class: "state" }, s.dirty ? "● не опубликовано" : "")));
+  if (!s.has_offers) {
+    card.append(el("p", { class: "muted" }, "Поток без офферов"));
+    return card;
+  }
+  const url = (p) => `/api/streams/${s.id}${p}`;
+  const tbody = el("tbody");
+  s.offers.forEach(o => {
+    const pinBtn = el("button", {
+      class: "pin" + (o.pinned ? " on" : ""), type: "button", disabled: busy || o.removed,
+      title: o.pinned ? "Открепить долю" : "Закрепить долю (не меняется при пересчётах)",
+      "aria-pressed": o.pinned ? "true" : "false",
+      onclick: () => run(() => api("POST", url(`/offers/${o.offer_id}/${o.pinned ? "unpin" : "pin"}`)),
+        o.pinned ? "Доля откреплена" : "Доля закреплена"),
+    }, "📌");
+    const action = o.removed
+      ? el("button", { class: "secondary small", type: "button", disabled: busy,
+          onclick: () => run(() => api("POST", url(`/offers/${o.offer_id}/bring-back`)), "Оффер возвращён, доли пересчитаны") }, "Bring back")
+      : el("button", { class: "danger", type: "button", disabled: busy,
+          onclick: () => run(() => api("POST", url(`/offers/${o.offer_id}/remove`)), "Оффер убран (0%), доли пересчитаны") }, "Remove");
+    tbody.append(el("tr", { class: o.removed ? "removed" : "" },
+      el("td", null, el("span", { class: "name" }, o.name), " ", el("span", { class: "muted" }, "#" + o.offer_id),
+        o.removed ? el("span", { class: "badge" }, "removed") : null,
+        !o.removed && o.state && o.state !== "active" ? el("span", { class: "badge ro", title: "статус оффера в потоке в Keitaro, сохраняется при Push" }, o.state) : null,
+        !o.removed && !o.in_keitaro ? el("span", { class: "badge", title: "изменение ещё не опубликовано" }, "ещё не в KT") : null),
+      el("td", { class: "num" }, o.share + "%", " ", pinBtn),
+      el("td", { class: "num" }, action)));
+  });
+  const totalCls = "total " + (s.share_valid ? "good" : "bad");
+  card.append(el("table", null,
+    el("thead", null, el("tr", null, el("th", null, "Оффер"), el("th", { class: "num" }, "Доля"), el("th"))),
+    tbody,
+    el("tfoot", null, el("tr", null, el("td", null, "Итого (активные)"),
+      el("td", { class: "num " + totalCls }, "Σ = " + s.share_total + "%" + (s.share_valid ? " ✓" : " ≠ 100%")), el("td")))));
+  if (!s.share_valid) card.append(el("p", { class: "hint" },
+    "Доли в Keitaro некорректны. Любое изменение пересчитает их; Push возможен только при Σ = 100%."));
+
+  // add offer (search by name or ID)
+  let picked = null;
+  const input = el("input", { placeholder: "добавить оффер: название или ID…", disabled: busy });
+  const addBtn = el("button", { type: "button", disabled: true,
+    onclick: () => picked && run(() => api("POST", url("/offers"), { offer_id: picked.id }), "Оффер добавлен в черновик, доли пересчитаны") }, "Добавить");
+  card.append(el("div", { class: "row", style: "margin-top:10px" }, el("div", { class: "grow" }, input), addBtn));
+  offerAutocomplete(input, (o) => { picked = o; addBtn.disabled = !o || busy; });
+
+  card.append(el("div", { class: "actions" },
+    el("button", { type: "button", disabled: busy || !s.dirty || !s.can_push || !s.share_valid,
+      title: s.can_push ? "" : "Push разрешён только для кампаний с нашим префиксом",
+      onclick: () => run(() => api("POST", url("/push")), "Опубликовано в Keitaro") }, "Push to KT"),
+    el("button", { type: "button", class: "secondary", disabled: busy || !s.dirty,
+      onclick: () => run(() => api("POST", url("/cancel")), "Изменения отменены") }, "Cancel")));
+  return card;
+}
+
+async function toggleAllOffers() {
+  const box = $("offers-box");
+  if (!box.hidden) { box.hidden = true; return; }
+  box.replaceChildren(el("p", { class: "muted" }, "Загрузка…"));
+  box.hidden = false;
+  try {
+    const offers = await api("GET", "/api/offers?limit=100");
+    box.replaceChildren(el("h3", null, "Все офферы трекера (" + offers.length + ")"),
+      el("div", { class: "all-offers" }, el("table", null,
+        el("thead", null, el("tr", null, el("th", null, "ID"), el("th", null, "Название"), el("th", null, "Статус"))),
+        el("tbody", null, ...offers.map(o => el("tr", null, el("td", null, "#" + o.id), el("td", null, o.name || ""), el("td", null, o.state || "")))))));
+  } catch (e) { box.replaceChildren(el("p", { class: "msg err" }, e.message)); }
+}
+
+async function deleteCampaign() {
+  if (!current) return;
+  if (!confirmDelete) { confirmDelete = true; render(); return; }  // two-click confirm, no browser dialog
+  confirmDelete = false;
+  busy = true; render();
+  try {
+    await api("DELETE", `/api/campaigns/${current.id}`);
+    showMsg($("msg"), "Кампания #" + current.id + " удалена (мягко, state=deleted)", "ok");
+    current = null;
+    await loadCampaigns();
+  } catch (e) { showMsg($("msg"), e.message, "err"); }
+  finally { busy = false; render(); }
+}
+</script>
+</body>
+</html>
