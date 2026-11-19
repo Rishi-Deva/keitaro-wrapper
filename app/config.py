@@ -1,6 +1,6 @@
 from functools import lru_cache
 
-from pydantic import Field, HttpUrl, SecretStr, field_validator
+from pydantic import Field, HttpUrl, SecretStr, ValidationError, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -29,6 +29,13 @@ class Settings(BaseSettings):
     # Link for "View in KT". Placeholders: {base} = KEITARO_URL without trailing slash, {id} = campaign id.
     # Format verified by the owner in the Keitaro admin (2026-11-19). Empty value -> the button is hidden.
     keitaro_campaign_url_template: str | None = "{base}/admin/#!/campaign/{id}/main"
+
+    @field_validator("keitaro_api_key")
+    @classmethod
+    def _key_not_empty(cls, v: SecretStr) -> SecretStr:
+        if not v.get_secret_value().strip():
+            raise ValueError("KEITARO_API_KEY is empty")
+        return v
 
     @field_validator("campaign_prefix")
     @classmethod
@@ -77,6 +84,17 @@ class Settings(BaseSettings):
         return str(self.keitaro_url).rstrip("/") + "/admin_api/v1"
 
 
+class ConfigError(RuntimeError):
+    """Readable startup error: which .env variables are missing or invalid (values are never shown)."""
+
+
 @lru_cache
 def get_settings() -> Settings:
-    return Settings()  # type: ignore[call-arg]
+    try:
+        return Settings()  # type: ignore[call-arg]
+    except ValidationError as e:
+        names = sorted({str(err["loc"][0]).upper() for err in e.errors() if err.get("loc")})
+        raise ConfigError(
+            "Configuration error: fill in or fix these variables in .env (see .env.example and README): "
+            + ", ".join(names)
+        ) from None

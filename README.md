@@ -79,6 +79,10 @@ curl -s -H "Api-Key: $KEITARO_API_KEY" "$KEITARO_URL/admin_api/v1/traffic_source
 ```bash
 .venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
+Если `.env` не заполнен (например, сразу после `cp .env.example .env`), сервер не стартует и пишет,
+какие переменные нужно задать, например:
+`ConfigError: Configuration error: fill in or fix these variables in .env ...: DEFAULT_DOMAIN_ID, ..., KEITARO_API_KEY`.
+Значения в сообщение не попадают. **Тестам и `scripts/fake_tracker.py` `.env` не нужен.**
 - http://127.0.0.1:8000/ — создание кампании
 - http://127.0.0.1:8000/editor.html — редактор
 - http://127.0.0.1:8000/docs — Swagger всех эндпоинтов. Для POST и DELETE нажмите **Authorize**

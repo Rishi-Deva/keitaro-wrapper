@@ -72,3 +72,16 @@ def test_env_example_does_not_override_default_template(tmp_path):
     uncommented = tmp_path / "e"
     uncommented.write_text(line[2:] + "\n")
     assert dotenv_values(uncommented)["KEITARO_CAMPAIGN_URL_TEMPLATE"] == "https://tracker.example/admin/#!/campaign/{id}/main"
+
+
+def test_startup_error_names_missing_variables_without_values(monkeypatch):
+    from app.config import ConfigError
+    monkeypatch.setenv("DEFAULT_DOMAIN_ID", "")
+    monkeypatch.setenv("KEITARO_API_KEY", "")
+    get_settings.cache_clear()
+    with pytest.raises(ConfigError) as e:
+        get_settings()
+    msg = str(e.value)
+    assert "DEFAULT_DOMAIN_ID" in msg and "KEITARO_API_KEY" in msg
+    assert "fake-api-key" not in msg and "tracker.test" not in msg
+    get_settings.cache_clear()
